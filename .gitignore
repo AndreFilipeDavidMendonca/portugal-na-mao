@@ -1,0 +1,19 @@
+# Nested git repos (not submodules — don't commit their content here)
+PT-portugal-na-mao-fe/
+
+# Build artifacts
+*.dump
+*.backup
+target/
+dist/
+build/
+node_modules/
+
+# Secrets / env
+.env
+.env.*
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
