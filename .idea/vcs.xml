@@ -5,5 +5,7 @@
     <mapping directory="$PROJECT_DIR$/PT-portugal-na-mao-fe" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/portugal-na-mao-api" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/portugal-na-palma-da-mao" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pt-operations-api" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pt-operations-fe" vcs="Git" />
   </component>
 </project>
