@@ -471,3 +471,11 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
   - Frontend: `AppContext.jsx` (deteção de `navigator.language`), `DistrictDrawer.jsx`/`MunicipalityDrawer.jsx` (`ptOf()`), `AdminEntityDrawer.jsx` (`textOf(entity.etymology)`)
   - Operação (gitignored, não commitado): `ops/gemini_backfill.py`, `ops/multilingual_production_sync.py`, `ops/backfill_progress.log`
   - Relatórios: `MULTILINGUAL_CONTENT_ARCHITECTURE_ANALYSIS.md`, `MULTILINGUAL_STORAGE_AND_AUTOMATION_FINAL_STUDY.md`, `MULTILINGUAL_TRANSLATION_COST_ESTIMATE.md`, `MULTILINGUAL_PT_EN_PHASED_IMPLEMENTATION_PLAN.md`, `MULTILINGUAL_PHASE0_1_SCHEMA_DESIGN.md`, `MULTILINGUAL_BACKFILL_PROGRESS.md`
+
+## 35. Cor do marker de Miradouros alinhada com Serras e Picos (2026-10-02)
+
+- **Tipo:** ajuste visual (frontend).
+- **Intenção:** a categoria "Miradouros" (`viewpoint`) passa a usar a mesma cor que "Serras e Picos" (`mountain`), em vez de uma cor verde-clara própria.
+- **Scope:** só `MARKER_COLORS.viewpoint` em `categories.jsx` — um único valor hex que já alimenta, via `--pc`, tanto o gradiente de fundo como o glow do pin no mapa, tooltips e badges em toda a app. O border do pin (branco fixo) não foi alterado, é partilhado por todas as categorias.
+- **Estado:** Implementado.
+- **Ficheiros:** `categories.jsx` (`MARKER_COLORS.viewpoint`: `#7BC49A` → `#6B7F6E`)
