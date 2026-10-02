@@ -478,6 +478,7 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Intenção:** a categoria "Miradouros" (`viewpoint`) passa a usar a mesma cor que "Serras e Picos" (`mountain`), em vez de uma cor verde-clara própria.
 - **Scope:** só `MARKER_COLORS.viewpoint` em `categories.jsx` — um único valor hex que já alimenta, via `--pc`, tanto o gradiente de fundo como o glow do pin no mapa, tooltips e badges em toda a app. O border do pin (branco fixo) não foi alterado, é partilhado por todas as categorias.
 - **Estado:** Implementado.
+- **Ficheiros:** `categories.jsx` (`MARKER_COLORS.viewpoint`: `#7BC49A` → `#6B7F6E`)
 
 ## 36. Remover sincronização Search→Mapa ao digitar (2026-10-02)
 
@@ -488,4 +489,13 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Correção:** `BboxLoader` deixou de ler `searchQuery` — removida a destructuring, o `searchQueryRef`, a construção do parâmetro `search` enviado a `/api/pois/lite`, e o `useEffect([searchQuery])` que disparava o reload do bbox a cada keystroke. Comentários desatualizados corrigidos nos dois ficheiros.
 - **Estado:** Implementado e **validado ao vivo** (app local): escrever "Castelo de Vide" agora dispara só 1 pedido (`/api/search`), os markers do mapa não mudam durante a digitação, e selecionar um resultado da dropdown continua a abrir a informação do POI normalmente. Build compilou sem erros. Não sincronizado com produção.
 - **Ficheiros:** `MapExplorer.jsx`, `GlobalInlineSearch.jsx`.
-- **Ficheiros:** `categories.jsx` (`MARKER_COLORS.viewpoint`: `#7BC49A` → `#6B7F6E`)
+
+## 37. Pré-visualização instantânea de Distrito/Município/Localidade na Search Bar (2026-10-02)
+
+- **Tipo:** melhoria de performance percebida (frontend).
+- **Intenção:** o André notou que a dropdown de pesquisa fica "parada" até o backend responder, e pediu para os resultados aparecerem progressivamente em vez de só no fim.
+- **Achado:** o frontend já carrega a lista completa de Distritos (~20), Municípios (~308) e Localidades (~540) no arranque da app (`fetchDistricts`/`fetchAllMunicipalities`/`fetchAllLocalities`, `AppContext.jsx`) — exatamente o mesmo conjunto (`findAllVisible()`) que o backend volta a pesquisar em `/api/search` a cada keystroke. Só o Património (POIs, ~17-21 mil registos) não está pré-carregado — esse continua a precisar do backend. Medição ao vivo (app local): `/api/search` demorava 80-230ms consoante a query, tempo gasto também em dados que já estavam no browser.
+- **Scope:** só o dropdown de pesquisa (`GlobalInlineSearch.jsx`), e só as 3 secções Distrito/Município/Localidade. Secção de Património e o próprio `/api/search` (rede de segurança, sempre a resposta final) ficam inalterados. Barras de pesquisa com chip ativo (distrito/município/localidade) não mostram esta pré-visualização, tal como a pesquisa real já não devolve essas secções nesse modo.
+- **Correção:** nova função `territoryPreview()` — filtro client-side (acento-insensível, mesma normalização que o backend usa) sobre os dados já carregados, chamada de forma síncrona a cada keystroke, antes do debounce/fetch. Mostra Distrito/Município/Localidade instantaneamente; a resposta autoritativa do backend chega pouco depois e substitui tudo (incluindo a pré-visualização) — nunca há uma segunda fonte de verdade, só uma antecipação visual.
+- **Estado:** Implementado e **validado ao vivo** (app local): escrever "Serra" mostra Município+Localidades no instante do keystroke (spinner do Património ainda a girar), e a resposta final do backend substitui corretamente pela lista completa (13 resultados, incluindo os 2 POIs). Sem erros de consola introduzidos (avisos de "duplicate key" pré-existentes num modal não relacionado, "Aventureiros Próximos", confirmados como já existentes antes desta alteração). Build compilou sem erros. Não sincronizado com produção.
+- **Ficheiros:** `GlobalInlineSearch.jsx`.
