@@ -1,0 +1,252 @@
+<title>Trip Memories — Render Server-Side POC</title>
+<style>
+  :root {
+    --ink: #0b1710;
+    --surface: #12201a;
+    --surface-2: #16261f;
+    --edge: #26382d;
+    --gold: #c9a84c;
+    --gold-soft: rgba(201, 168, 76, 0.14);
+    --parchment: #f2efe6;
+    --sage: #9fb0a3;
+    --sage-dim: #6f8378;
+    --good: #7fae8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #0b1710;
+      --surface: #12201a;
+      --surface-2: #16261f;
+      --edge: #26382d;
+      --parchment: #f2efe6;
+      --sage: #9fb0a3;
+      --sage-dim: #6f8378;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #0b1710;
+    --surface: #12201a;
+    --surface-2: #16261f;
+    --edge: #26382d;
+    --parchment: #f2efe6;
+    --sage: #9fb0a3;
+    --sage-dim: #6f8378;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    padding: 4rem 1.5rem 5rem;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+  }
+
+  .eyebrow {
+    font-size: 0.7rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-weight: 400;
+    color: var(--parchment);
+    margin: 0.4rem 0 0;
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+  }
+
+  .dek {
+    color: var(--sage);
+    font-size: 0.98rem;
+    max-width: 62ch;
+    margin: 0.85rem 0 0;
+  }
+
+  .verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.1rem;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--gold);
+    border-radius: 999px;
+    background: var(--gold-soft);
+    color: var(--gold);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+    width: fit-content;
+  }
+  .verdict::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 0 3px rgba(127, 174, 138, 0.25);
+  }
+
+  figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .frame {
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 0.6rem;
+  }
+
+  video {
+    display: block;
+    width: 100%;
+    border-radius: 9px;
+    background: #000;
+  }
+
+  figcaption {
+    color: var(--sage-dim);
+    font-size: 0.82rem;
+    padding: 0 0.2rem;
+  }
+  figcaption b { color: var(--sage); font-weight: 600; }
+
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sage-dim);
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 1px;
+    background: var(--edge);
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .stat {
+    background: var(--surface);
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .stat .value {
+    font-variant-numeric: tabular-nums;
+    font-size: 1.3rem;
+    color: var(--parchment);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .stat .label {
+    font-size: 0.72rem;
+    color: var(--sage-dim);
+  }
+
+  .note {
+    border-left: 2px solid var(--gold);
+    padding-left: 1rem;
+    color: var(--sage);
+    font-size: 0.92rem;
+    max-width: 64ch;
+  }
+  .note b { color: var(--parchment); font-weight: 600; }
+
+  footer {
+    color: var(--sage-dim);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--edge);
+    padding-top: 1.25rem;
+  }
+  footer code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.76rem;
+    color: var(--sage);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .page { animation: rise 0.5s ease-out both; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<div class="page">
+  <div>
+    <p class="eyebrow">Trip Memories · investigação técnica</p>
+    <h1>Renderização server-side do Tour Guiado</h1>
+    <p class="dek">
+      Headless Chrome (Puppeteer) a correr a app real, capturado via protocolo do
+      browser (CDP screencast) e montado em MP4 — sem tocar em nenhuma linha do
+      Tour Guide. Este é o vídeo que saiu do primeiro POC, sem cortes.
+    </p>
+    <div class="verdict">Viável</div>
+  </div>
+
+  <figure>
+    <div class="frame">
+      <video controls preload="metadata" poster="">
+        <source src="tour_poc.mp4" type="video/mp4" />
+      </video>
+    </div>
+    <figcaption>
+      Viagem <b>"Test"</b> — 3 POIs reais (Algar do Castelo, Palácio
+      Angeja-Palmela, Castelo de São Jorge) + 1 memória. Gerado a partir da
+      sessão real do Tour Guiado, sem qualquer edição.
+    </figcaption>
+  </figure>
+
+  <div>
+    <p class="section-label" style="margin-bottom: 0.7rem;">Números do render</p>
+    <div class="stats">
+      <div class="stat"><span class="value">25,1s</span><span class="label">duração</span></div>
+      <div class="stat"><span class="value">1400×900</span><span class="label">resolução</span></div>
+      <div class="stat"><span class="value">23,4 fps</span><span class="label">média (pós-dedupe)</span></div>
+      <div class="stat"><span class="value">14,2 MB</span><span class="label">tamanho MP4</span></div>
+      <div class="stat"><span class="value">2,75s</span><span class="label">tempo de encoding</span></div>
+      <div class="stat"><span class="value">1,42 GB</span><span class="label">RAM pico</span></div>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>Sem CORS, sem quadrados pretos, sem travagens.</b> A captura via protocolo
+    do browser lê a composição já pronta do Chrome — nunca pixels via JavaScript —
+    por isso os tiles da Esri e as fotos do R2 aparecem completos sem qualquer
+    configuração adicional, ao contrário das tentativas anteriores com
+    <code>html2canvas</code>.
+  </p>
+
+  <footer>
+    Relatório completo:
+    <code>docs/reports/video-poc/VIDEO_SERVER_RENDERING_INVESTIGATION.md</code>
+    · Código do POC (fora do repositório): <code>/tmp/tour-render-poc/</code>
+  </footer>
+</div>

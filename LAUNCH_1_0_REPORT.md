@@ -472,6 +472,22 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
   - Operação (gitignored, não commitado): `ops/gemini_backfill.py`, `ops/multilingual_production_sync.py`, `ops/backfill_progress.log`
   - Relatórios: `MULTILINGUAL_CONTENT_ARCHITECTURE_ANALYSIS.md`, `MULTILINGUAL_STORAGE_AND_AUTOMATION_FINAL_STUDY.md`, `MULTILINGUAL_TRANSLATION_COST_ESTIMATE.md`, `MULTILINGUAL_PT_EN_PHASED_IMPLEMENTATION_PLAN.md`, `MULTILINGUAL_PHASE0_1_SCHEMA_DESIGN.md`, `MULTILINGUAL_BACKFILL_PROGRESS.md`
 
+## 35. Suporte multilingue — extensão aos campos SIPA + correção de bug de recitação (2026-10-02)
+
+- **Tipo:** feature nova (schema de BD + backend + frontend) + operação de dados (BD local). **Não sincronizado com produção — decisão deliberada, ver "Estado".**
+- **Intenção:** fechar uma lacuna real da entrada 34 — `PoiModal.jsx` mostra o texto SIPA (património classificado, `summary`/`description`/`chronology`/etc.) **em vez** de `poi.description` sempre que o POI tem registo SIPA `AUTO_ACCEPTED`, e esses campos tinham ficado inteiramente fora do âmbito original. Descoberto porque o André continuava a ver texto em português na app mesmo com `poi.description` 100% traduzido.
+- **Scope:** 1.656 POIs têm registo SIPA (1.493 `AUTO_ACCEPTED`, realmente mostrados na app). 15 campos bilingues novos em `poi_translation` (V100): `summary`, `description` SIPA, `complementary_description`, `chronology`, `technical_data`, `materials`, `context`, `initial_use`, `property`, `affectation`, `interventions`, `observations`, `sipa_category_1`, `sipa_typology_1`, `construction_period` + flag `sipa_translated`. `author_builder` fica sempre em PT (nome próprio, mesma política do `architect`/POI). Backend (`SipaEnrichmentDto`, `PoiService#toSipaDto`) e frontend (`PoiModal.jsx`, 7 pontos de render, todos envolvidos em `textOf()`) atualizados.
+- **Bug real encontrado e corrigido no backfill** (`ops/gemini_backfill.py`, não commitado — gitignored): lotes de 25 municípios (texto Wikipedia, ~21K caracteres) disparavam `finishReason: RECITATION` no Gemini de forma consistente — o modelo recusa gerar quando a tradução fica demasiado parecida com conteúdo já conhecido (município com artigo Wikipedia em inglês). Confirmado empiricamente: lote de 1 nunca dispara, lote de 25 dispara sempre. Fix: `MUNICIPALITY_BATCH_SIZE=5`; ordem do script trocada (POIs antes de municípios) para um lote preso nunca mais gastar quota de outras entidades; `call_gemini` passou a reportar o `finishReason` real em vez de um `KeyError` confuso. Mesmo risco confirmado nos campos SIPA (texto de registo oficial, ainda mais volumoso) — resolvido à partida com lote de 1.
+- **Estado:** Implementado e validado ao vivo (POI #57020 "Forte de São Roque" e #49661, confirmados PT+EN corretos via API local). **Backfill em curso, só local**: Distritos 20/20, Municípios 218/308, POIs description 6.001/6.001, POIs SIPA 318/1.656 — cron local (a cada 6h) continua a avançar sozinho.
+  - **Decisão explícita do André (2026-10-02): finalizar TUDO localmente primeiro (municípios + SIPA a 100%) antes da próxima sincronização com produção** — não fazer syncs parciais adicionais enquanto houver backfill pendente.
+  - Pendente antes desse sync: aplicar `V100` em produção e estender `ops/multilingual_production_sync.py` para os 15 campos SIPA novos (hoje só sincroniza `name_en`/`description`/`architect`).
+  - Nota operacional: o critério de "concluído" do cron agendado (`CronCreate`, 6/6h) só verifica 3 contadores (distritos/municípios/POIs description) — não inclui SIPA; avaliar recriar o agendamento com o critério atualizado antes de confiar cegamente na notificação automática de "backfill completo".
+- **Ficheiros:**
+  - Backend: `V100__poi_sipa_translation_columns.sql`, `PoiTranslation.java` (15 campos novos), `SipaEnrichmentDto.java`, `PoiService.java` (`toSipaDto`/`bilingualSipa`)
+  - Frontend: `PoiModal.jsx` (`SummaryWithReadMore` + 7 pontos de render envolvidos em `textOf()`)
+  - Operação (gitignored, não commitado): `ops/gemini_backfill.py` (função `translate_poi_sipa` nova + fix de recitação + reordenação), `ops/backfill_progress.log`
+  - `MULTILINGUAL_BACKFILL_PROGRESS.md` atualizado com o novo âmbito e estado
+
 ## 35. Cor do marker de Miradouros alinhada com Serras e Picos (2026-10-02)
 
 - **Tipo:** ajuste visual (frontend).
@@ -499,3 +515,11 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Correção:** nova função `territoryPreview()` — filtro client-side (acento-insensível, mesma normalização que o backend usa) sobre os dados já carregados, chamada de forma síncrona a cada keystroke, antes do debounce/fetch. Mostra Distrito/Município/Localidade instantaneamente; a resposta autoritativa do backend chega pouco depois e substitui tudo (incluindo a pré-visualização) — nunca há uma segunda fonte de verdade, só uma antecipação visual.
 - **Estado:** Implementado e **validado ao vivo** (app local): escrever "Serra" mostra Município+Localidades no instante do keystroke (spinner do Património ainda a girar), e a resposta final do backend substitui corretamente pela lista completa (13 resultados, incluindo os 2 POIs). Sem erros de consola introduzidos (avisos de "duplicate key" pré-existentes num modal não relacionado, "Aventureiros Próximos", confirmados como já existentes antes desta alteração). Build compilou sem erros. Não sincronizado com produção.
 - **Ficheiros:** `GlobalInlineSearch.jsx`.
+
+## 38. Novo domínio portugal-na-mao.com aceite no CORS da API (2026-10-08)
+
+- **Tipo:** configuração (backend).
+- **Intenção:** domínio próprio `portugal-na-mao.com` foi comprado; a API estava a rejeitar pedidos desse origin porque o `CorsConfigurationSource` só tinha `localhost` e `portugal-na-palma-da-mao*.vercel.app` na lista (`SecurityConfig.java`, única allowlist de CORS de toda a API — confirmado por auditoria, sem `@CrossOrigin`, sem CSRF-trusted-origins, sem cookie-domain, auth é só JWT bearer).
+- **Correção:** adicionados `https://portugal-na-mao.com` e `https://www.portugal-na-mao.com` a `cfg.setAllowedOriginPatterns(...)`, sem remover nenhuma entrada existente.
+- **Estado:** Implementado. Validação local/produção e sincronização pendentes.
+- **Ficheiros:** `src/main/java/pt/dot/application/security/SecurityConfig.java` (repo `portugal-na-mao-api`).
