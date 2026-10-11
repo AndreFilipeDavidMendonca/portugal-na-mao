@@ -747,13 +747,37 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
   viagem está atualmente a falhar com 500** em local. Não corrigido nesta entrada (fora do scope
   desta feature) — fixture de teste criado via SQL direto para contornar, bug fica registado para
   decisão do André.
-- **Estado:** Implementado e **validado ao vivo em local**. **Não commitado, não enviado.**
-  Resto da feature (pacote `pt.ptops.testing` em `pt-operations-api`, separador "Testing" em
-  `pt-operations-fe`, scripts k6) vive fora destes dois repositórios cobertos por este registo —
-  ver PT_OPERATIONS_SYNTHETIC_LOAD_TESTING_ARCHITECTURE_REPORT_3.md para o conjunto completo.
+- **Atualização (2026-10-11)** — dois achados a mais, do primeiro teste de carga real (20
+  utilizadores virtuais autenticados, local): o pool de ligações esgotava mesmo
+  (`HikariPool-1 "waiting=26"`, 20 erros 500 reais, pedidos a bater nos 30s do
+  `connection-timeout`). Duas causas, as duas corrigidas e **medidas antes/depois com o mesmo
+  cenário exato**:
+  1. `LazyWikimediaMediaService.ensurePoiImages`/`ensureDistrictImages` abriam sempre uma
+     transação `REQUIRES_NEW` (uma segunda ligação do mesmo pool) só para, na maioria das vezes,
+     descobrirem que já havia imagens e não havia nada a fazer. `hasMedia()` passou a correr na
+     transação do próprio chamador; só entra em `REQUIRES_NEW` quando há mesmo trabalho a fazer
+     (o fetch ao Wikimedia + upload R2). Resultado medido: erros 500 **20 → 3**, pedidos acima de
+     20s **35 → 18**, duração média do endpoint mais afetado (`/api/districts/{id}`) **557ms →
+     310ms**.
+  2. `DB_POOL_MAX` local subiu de **8 → 15** (Postgres local tem `max_connections=100`
+     confirmado, sem mais nada a competir por ligações — só o perfil `local`, o perfil `prod`
+     fica tal como estava, `10`, decisão separada). Resultado medido, mesmo cenário exato:
+     **0 erros, 0 pedidos acima de 20s, 0 timeouts do Hikari**, quase o dobro do throughput
+     (5676 → 10745 pedidos no mesmo tempo de rampa).
+- **Estado:** Implementado e **validado ao vivo em local, incluindo antes/depois medido para os
+  dois fixes de performance**. **Commitado e enviado (push)** — autorização explícita do André
+  ("sim") para desbloquear testes de carga/sintéticos contra produção, que exigem este deploy
+  primeiro (a coluna `test_run_id`/o `RequestLoggingFilter` novo só reconhecem tráfego de teste
+  depois de estarem em produção — sem isto, testar produção contaminaria o Analytics real, o
+  mesmo problema que esta funcionalidade existe para evitar). Resto da feature (pacote
+  `pt.ptops.testing` em `pt-operations-api`, separador "Testing" em `pt-operations-fe`, scripts
+  k6) vive fora destes dois repositórios cobertos por este registo — ver
+  PT_OPERATIONS_SYNTHETIC_LOAD_TESTING_ARCHITECTURE_REPORT_3.md/..._STATUS_REPORT.md para o
+  conjunto completo.
 - **Ficheiros:** `V104__test_run_id_columns.sql`, `TestAgentContext.java` (novo),
   `RequestLoggingFilter.java`, `ApiRequestLogService.java`, `UserActivityLogService.java`,
-  `SecurityConfig.java`, `application.yml` (`portugal-na-mao-api`).
+  `SecurityConfig.java`, `LazyWikimediaMediaService.java`, `application.yml`
+  (`portugal-na-mao-api`).
 
 ## 55. Fase 5 (performance do Prepare Tour) — 2 waits de ~1200ms sequenciais, desnecessariamente (2026-10-10)
 
