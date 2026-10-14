@@ -835,3 +835,20 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Validação pré-commit:** build de produção do frontend (`CI=true npx craco build`) e `mvn -o compile` do backend, ambos limpos, imediatamente antes de cada commit. `git show --stat HEAD` confirmado em ambos os repositórios logo após o commit, sem ficheiros inesperados.
 - **Estado:** **Commitado e enviado (push) para `origin/main`** nos dois repositórios.
 - **Ficheiros:** ver entradas 50-53/55/56/58 para a lista completa por fase.
+
+## 60. Performance de imagens — prioridade da capa + lazy-loading de imagens secundárias (2026-10-14)
+
+- **Tipo:** correção de performance (frontend), diagnóstico confirmado por leitura de código antes de alterar.
+- **Intenção:** dois problemas reportados — (1) imagens estáticas do `/public` sem estratégia de cache de longo prazo; (2) suspeita de que o carregamento em "grupos de três" das galerias R2 estava a fazer a foto de capa competir com as duas seguintes pela mesma ligação, atrasando a primeira foto.
+- **Diagnóstico confirmado:**
+  1. `vercel.json` só tinha headers de segurança — nenhuma regra `Cache-Control` para estáticos (`logo.png`, fundos de perfil, sprites de veículo), todos referenciados por caminho literal do `/public` (sem hash de conteúdo).
+  2. O mecanismo de "3 de cada vez" existe em dois sítios — `ImageCarousel.jsx` (`MOBILE_INITIAL_LOAD = 3`, galeria partilhada por POI/Distrito/Município/Localidade via `AdminEntityDrawer`) e `FeedPanel.jsx`'s `PhotoCarousel` (`CAROUSEL_PRELOAD_AHEAD = 2`, fotos dos posts) — e em ambos as 3 imagens entravam no DOM no mesmo commit com `loading="lazy"` mas **sem `fetchPriority`**, disputando a mesma ligação HTTP/2 em igualdade. O ramo desktop do `ImageCarousel` já tinha `fetchpriority` corrigido (2026-09-16); só o mobile e o Feed estavam em falta.
+  3. Causa adicional, provavelmente maior do que a dos grupos de 3: **nenhuma imagem secundária tinha `loading="lazy"`** — `GeoEntitySections.jsx` (municípios/vilas no distrito/município, "Locais em destaque"), o grid "Nearby" do `PoiModal.jsx`, `PlacesCardList.jsx` e `SuggestionPoiCard.jsx` renderizavam todas as imagens de uma lista (ex.: os 18 municípios de um distrito) de uma vez, eager, competindo com a capa.
+  4. URLs de imagem R2 vêm da API como URLs públicos estáveis (sem assinatura/expiração) — cache do browser entre visitas já funciona, não havia bug de FE aí.
+- **Correção aplicada:**
+  - `vercel.json`: nova regra de headers para `/(.*)\.(png|jpg|jpeg|webp|gif|svg|ico)` com `Cache-Control: public, max-age=31536000, immutable`.
+  - `ImageCarousel.jsx` (mobile) e `FeedPanel.jsx`'s `PhotoCarousel`: `fetchpriority="high"`/`loading="eager"` no índice 0, `"low"`/`"lazy"` nos restantes do grupo de 3.
+  - `loading="lazy"` + `decoding="async"` em `GeoEntitySections.jsx` (4 cartões), `PoiModal.jsx` (grid "Nearby"), `PlacesCardList.jsx`, `SuggestionPoiCard.jsx`.
+- **Validação:** build de produção (`CI=true npx craco build`) limpo imediatamente antes do commit. Não testado ao vivo no browser nesta ronda — o André vai validar em produção.
+- **Estado:** Implementado. **Commitado e enviado (push)** — `5a55469` em `PT-portugal-na-mao-fe`, a pedido explícito do André ("podes commitar e fazer push que eu quero testar em prod").
+- **Ficheiros:** `vercel.json`, `src/components/shared/ImageCarousel.jsx`, `src/components/feed/FeedPanel.jsx`, `src/components/shared/GeoEntitySections.jsx`, `src/components/poi/PoiModal.jsx`, `src/components/social/PlacesCardList.jsx`, `src/components/poi/SuggestionPoiCard.jsx` (todos `PT-portugal-na-mao-fe`).
