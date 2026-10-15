@@ -22,6 +22,11 @@ const TEST_TRIP_ID = __ENV.TEST_TRIP_ID;
 // every local dev DB seeded the normal way. Override via env if your local data differs.
 const DISTRICT_ID = __ENV.DISTRICT_ID || "16"; // Lisboa
 const POI_ID = __ENV.POI_ID; // resolved from the search step below if not set
+// PT_OPERATIONS_OBSERVABILITY_COVERAGE_REPORT.md (2026-10-15) — cobertura ampliada. Município
+// (Alenquer, 148) e localidade (A dos Cunhados, 420) existem em qualquer BD local/prod semeada
+// normalmente, no distrito 16 acima — mesmo princípio de "seed conhecida", override via env.
+const MUNICIPALITY_ID = __ENV.MUNICIPALITY_ID || "148";
+const LOCALITY_ID = __ENV.LOCALITY_ID || "420";
 
 export const options = {
   vus: 1,
@@ -59,6 +64,7 @@ export default function () {
 
   const authHeaders = testHeaders({ Authorization: `Bearer ${token}` });
 
+  let mapPoiIds = [];
   group("MAP", function () {
     // Rough bbox around Lisboa district — see PoiController/DistrictPoiQueryService for the
     // bbox="minLon,minLat,maxLon,maxLat" contract.
@@ -66,7 +72,12 @@ export default function () {
       `${BASE_URL}/api/pois/lite?bbox=-9.30,38.60,-9.00,38.80&districtId=${DISTRICT_ID}&limit=50`,
       { headers: authHeaders }
     );
-    check(res, { "map: 200": (r) => r.status === 200 });
+    const ok = check(res, { "map: 200": (r) => r.status === 200 });
+    if (ok) {
+      const body = res.json();
+      const pois = Array.isArray(body) ? body : body.pois || [];
+      mapPoiIds = pois.slice(0, 3).map((p) => p.id);
+    }
   });
 
   let resolvedPoiId = POI_ID;
@@ -89,6 +100,32 @@ export default function () {
   group("DISTRICT", function () {
     const res = http.get(`${BASE_URL}/api/districts/${DISTRICT_ID}`, { headers: authHeaders });
     check(res, { "district: 200": (r) => r.status === 200 });
+  });
+
+  // PT_OPERATIONS_OBSERVABILITY_COVERAGE_REPORT.md (2026-10-15) — município/localidade seguem
+  // exatamente o mesmo padrão de leitura que DISTRICT acima (GET por id, público). Nunca
+  // cobertos antes deste estudo de lacunas.
+  group("MUNICIPALITY", function () {
+    const res = http.get(`${BASE_URL}/api/municipalities/${MUNICIPALITY_ID}`, { headers: authHeaders });
+    check(res, { "municipality: 200": (r) => r.status === 200 });
+  });
+
+  group("LOCALITY", function () {
+    const res = http.get(`${BASE_URL}/api/localities/${LOCALITY_ID}`, { headers: authHeaders });
+    check(res, { "locality: 200": (r) => r.status === 200 });
+  });
+
+  // Único caminho de todo o produto que chama o OSRM (TripRouteService.planProposalRoute) —
+  // nunca exercitado por nenhum cenário de teste até agora (achado do estudo de cobertura). Usa
+  // os POIs já resolvidos pelo MAP acima, sem persistir nada (preview puro).
+  group("ROUTE_PREVIEW", function () {
+    if (mapPoiIds.length < 2) return; // sem POIs suficientes resolvidos pelo MAP — nada a prever
+    const res = http.post(
+      `${BASE_URL}/api/trips/proposals/route-preview`,
+      JSON.stringify({ poiIds: mapPoiIds, days: 1, originLat: 38.7169, originLon: -9.1399 }),
+      { headers: Object.assign({ "Content-Type": "application/json" }, authHeaders) }
+    );
+    check(res, { "route preview: 200": (r) => r.status === 200 });
   });
 
   group("TRIP", function () {

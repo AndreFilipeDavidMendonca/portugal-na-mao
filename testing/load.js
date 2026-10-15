@@ -1,7 +1,8 @@
 // PT Operations — Load / Stress Testing (REPORT_3 + pedido de 2026-10-11, dropdown de nº de
-// agentes). Local only — BASE_URL always comes from pt-operations-api's
-// ptops.pt-api.local-base-url, there is no code path anywhere in this repo or in
-// TestRunProcessManager that can point this at production. Gradual ramp by design (never a
+// agentes). BASE_URL comes from pt-operations-api's ptops.pt-api.local-base-url OR
+// ...prod-base-url, picked by TestRunProcessManager from the targetEnv the operator chose —
+// prod runs are explicitly gated by ProductionGate on that side, never implicit here. Gradual
+// ramp by design (never a
 // direct jump to MAX_VUS, see REPORT_3 §6.4) — each step can be read against
 // pg_stat_activity/hikaricp metrics before deciding to go further. MAX_VUS scales the same
 // 5%→25%→50%→100% shape the original fixed 1→5→10→20 ramp already was (20 * [0.05,0.25,0.5,1] =
@@ -23,6 +24,10 @@ const TECH_USER_PASSWORD = __ENV.TECH_USER_PASSWORD;
 const TEST_TRIP_ID = __ENV.TEST_TRIP_ID;
 const PROFILE = __ENV.PROFILE || "anonymous";
 const DISTRICT_ID = __ENV.DISTRICT_ID || "16";
+// PT_OPERATIONS_OBSERVABILITY_COVERAGE_REPORT.md (2026-10-15) — mesma seed conhecida que
+// synthetic.js (distrito 16, Lisboa): Alenquer (município) e A dos Cunhados (localidade).
+const MUNICIPALITY_ID = __ENV.MUNICIPALITY_ID || "148";
+const LOCALITY_ID = __ENV.LOCALITY_ID || "420";
 const MAX_VUS = Math.max(1, parseInt(__ENV.MAX_VUS || "20", 10));
 
 function rampStages(maxVus) {
@@ -68,12 +73,18 @@ export default function (data) {
     data && data.token ? { Authorization: `Bearer ${data.token}` } : {}
   );
 
+  let mapPoiIds = [];
   group("MAP", function () {
     const res = http.get(
       `${BASE_URL}/api/pois/lite?bbox=-9.30,38.60,-9.00,38.80&districtId=${DISTRICT_ID}&limit=50`,
       { headers }
     );
-    check(res, { "map: 200": (r) => r.status === 200 });
+    const ok = check(res, { "map: 200": (r) => r.status === 200 });
+    if (ok) {
+      const body = res.json();
+      const pois = Array.isArray(body) ? body : body.pois || [];
+      mapPoiIds = pois.slice(0, 3).map((p) => p.id);
+    }
   });
 
   group("SEARCH", function () {
@@ -86,10 +97,37 @@ export default function (data) {
     check(res, { "district: 200": (r) => r.status === 200 });
   });
 
+  // PT_OPERATIONS_OBSERVABILITY_COVERAGE_REPORT.md (2026-10-15) — cobertura ampliada, mesmo
+  // padrão público de leitura que DISTRICT acima, para os dois perfis (nunca testados antes).
+  group("MUNICIPALITY", function () {
+    const res = http.get(`${BASE_URL}/api/municipalities/${MUNICIPALITY_ID}`, { headers });
+    check(res, { "municipality: 200": (r) => r.status === 200 });
+  });
+
+  group("LOCALITY", function () {
+    const res = http.get(`${BASE_URL}/api/localities/${LOCALITY_ID}`, { headers });
+    check(res, { "locality: 200": (r) => r.status === 200 });
+  });
+
   if (PROFILE === "authenticated" && TEST_TRIP_ID) {
     group("TRIP", function () {
       const res = http.get(`${BASE_URL}/api/trips/${TEST_TRIP_ID}`, { headers });
       check(res, { "trip: 200": (r) => r.status === 200 });
+    });
+  }
+
+  // Único caminho de todo o produto que chama o OSRM — só no perfil autenticado, para não
+  // multiplicar pedidos de routing por todos os agentes anónimos de um teste de carga grande
+  // (o custo de computação do OSRM é real e por desenho separado do resto, ver Dockerfile).
+  if (PROFILE === "authenticated") {
+    group("ROUTE_PREVIEW", function () {
+      if (mapPoiIds.length < 2) return;
+      const res = http.post(
+        `${BASE_URL}/api/trips/proposals/route-preview`,
+        JSON.stringify({ poiIds: mapPoiIds, days: 1, originLat: 38.7169, originLon: -9.1399 }),
+        { headers: Object.assign({ "Content-Type": "application/json" }, headers) }
+      );
+      check(res, { "route preview: 200": (r) => r.status === 200 });
     });
   }
 }
