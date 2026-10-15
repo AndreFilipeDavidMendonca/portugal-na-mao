@@ -903,3 +903,26 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Achado à parte, não corrigido:** `POST /api/events` (analytics fire-and-forget) devolveu 503 durante os testes — não bloqueia pesquisa/mapa, fora de âmbito.
 - **Estado:** Diagnóstico concluído, nada implementado (nada estava por fazer). Fases 2-8 do novo pedido não tocadas, a aguardar instrução.
 - **Ficheiros:** nenhum.
+
+## 65. Scoring 2.0 — pesquisa por categoria usa display_score + scoring dinâmico (fila/trigger/incremental) (2026-10-14/15)
+
+- **Tipo:** estudo + implementação (código local + migration local), em várias sub-fases pedidas pelo André ao longo da sessão.
+- **Intenção:** 1) corrigir a ordenação da pesquisa por categoria (hoje só por relevância textual/nome alfabético, nunca por importância do POI); 2) estudar e corrigir a causa de "tantos castelos" dominarem o mapa/Principais; 3) estudar modelos experimentais de fórmulas de scoring (Modelo A/B/C, "Modelo B2"); 4) resolver a desatualização estrutural dos scores (parados numa única corrida desde 2026-07-29) com uma arquitetura dinâmica em vez de voltar a persistir um número estático.
+- **Estudos produzidos (read-only, sem alterações nessa fase):**
+  - `SEARCH_SCORE_CATEGORY_DIVERSITY_STUDY.md` (portugal-na-mao-api) — confirma que a pesquisa não usa nenhum score hoje; categorias "comerciais" (accommodation/gastronomy/crafts/regional_products) têm zero POIs na BD.
+  - `MAP_BBOX_ZOOM_SCORING_DIVERSIFICATION_STUDY.md` (workspace, fork) — `castle` é a única categoria a saturar `display_score=100` nacionalmente; `monument` fica estruturalmente excluído de "Principais" pelo portão `Tourism>=60` (baseline da própria categoria é 55); Castelo de Marvão desaparece no zoom regional por partilhar categoria com outros castelos a 100, não por score baixo.
+  - `SCORING_2_0_ARCHITECTURE_STUDY.md` (portugal-na-mao-api, fork) — 3 modelos experimentais de fórmulas (A conservador/B equilibrado/C discovery), simulados em todos os 13.822 POIs; todos os scores persistidos vêm de uma única corrida em 2026-07-29, nunca recalculados.
+  - `SCORING_2_0_DYNAMIC_ARCHITECTURE_STUDY.md` (workspace, fork) — arquitetura recomendada para a atualização (não as fórmulas): persistência mantida, deteção via trigger SQL (confirmado que scripts Python escrevem em `poi`/`media_item`/`poi_sipa_enrichment` fora do runtime Java — um listener Spring nunca veria essas escritas), recálculo incremental por POI.
+- **Implementado (Fase A da arquitetura dinâmica, + Fase 1 da pesquisa):**
+  - `SearchService.java`/`PoiRepository.java`: pesquisa por categoria/grupo pura (sem nome) ordena por `display_score DESC`; pesquisa por nome inalterada (só relevância textual); limite já não reserva posições vazias a distrito/município/localidade sem correspondências.
+  - `V105__poi_rescore_queue.sql` (migration local): tabela `poi_rescore_queue` + triggers em `poi`/`media_item`/`poi_sipa_enrichment`, só nas colunas que as fórmulas atuais realmente leem; nunca nas próprias colunas de score (evita ciclo).
+  - `compute_confidence_score.py`/`compute_public_scores.py`: `compute_and_persist(poi_ids, conn)` reutilizável por subconjunto de POIs, zero alteração a fórmulas; percentil incremental contra a distribuição real completa.
+  - `rescore_pending.py` (novo): runner — `SKIP LOCKED`, ordem Confidence→Public, retry espaçado em falha (corrigido nesta sessão, ver achado abaixo), recuperação de processamento abandonado.
+  - `seed_missing_scores.py` (novo): catch-up com `--limit` para lotes controlados.
+  - `ops/run_rescore_pending.sh` (gitignored) ativado no crontab **local**, 15/15 min, mesmo padrão já existente (`run_gemini_backfill.sh`).
+- **Achado/bug real encontrado e corrigido durante validação com concorrência real (2 transações simultâneas):** `mark_done()` apagava da fila por `poi_id` sem verificar o estado — se uma alteração concorrente repunha um POI a `PENDING` enquanto o lote antigo ainda estava "em processamento", esse `mark_done` apagava-o por engano, perdendo a atualização. Corrigido com `AND status='PROCESSING'` no `DELETE`, reproduzido o cenário antes e depois para confirmar. Corrigido também o espaçamento de retries (antes esgotava os 5 intentos em milissegundos na mesma falha).
+- **Executado com autorização explícita do André:** os 620 POIs que nunca tinham score foram pontuados a sério (`scores_computed_at IS NULL`: 620 → 0, 0 erros); cron local ativado a sério.
+- **Não implementado/alterado, por decisão explícita:** nenhuma fórmula/peso/critério do Modelo B2; nenhuma query de mapa/BBOX; nenhuma alteração de produção.
+- **Validação:** build Java limpo (`mvn compile`), sintaxe Python limpa, testes reais de concorrência (`SKIP LOCKED` com 2 processos genuinamente simultâneos), falha forçada + recuperação, 9 cenários da secção 6 do pedido original (criação de POI, fotografia nova/removida, dados SIPA, escrita externa à API, etc.), todos em transações com `ROLLBACK` onde possível para não deixar dados de teste.
+- **Estado:** Implementado e validado localmente. **Commitado e enviado (push)** — `ad55696` em `portugal-na-mao-api` (código), `b50c792` em `portugal-workspace` (os 3 relatórios de estudo/implementação).
+- **Ficheiros:** ver mensagens dos 2 commits para a lista completa.
