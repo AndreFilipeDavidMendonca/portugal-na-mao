@@ -128,6 +128,29 @@ export default function () {
     check(res, { "route preview: 200": (r) => r.status === 200 });
   });
 
+  // PT_OPERATIONS_OBSERVABILITY_COVERAGE_REPORT.md (2026-10-15) — cobertura ampliada, área
+  // social. Só leituras (GET) — nunca um pedido de amizade/mensagem real, para não deixar
+  // vestígios persistentes numa conta técnica de produção (friendships/request, chat/with são
+  // escritas, deliberadamente não tocadas aqui). A conta técnica não tem amigos/notificações,
+  // mas os 4 endpoints respondem 200 com listas vazias nesse caso — é exatamente isso que valida
+  // "o endpoint funciona", não o conteúdo.
+  group("SOCIAL", function () {
+    const friends = http.get(`${BASE_URL}/api/friendships`, { headers: authHeaders });
+    check(friends, { "friendships: 200": (r) => r.status === 200 });
+
+    const pending = http.get(`${BASE_URL}/api/friendships/pending`, { headers: authHeaders });
+    check(pending, { "friendships pending: 200": (r) => r.status === 200 });
+
+    const search = http.get(`${BASE_URL}/api/friendships/search?q=an`, { headers: authHeaders });
+    check(search, { "friendships search: 200": (r) => r.status === 200 });
+
+    const notifications = http.get(`${BASE_URL}/api/notifications`, { headers: authHeaders });
+    check(notifications, { "notifications: 200": (r) => r.status === 200 });
+
+    const feed = http.get(`${BASE_URL}/api/feed?page=0&size=20`, { headers: authHeaders });
+    check(feed, { "feed: 200": (r) => r.status === 200 });
+  });
+
   group("TRIP", function () {
     if (!TEST_TRIP_ID) return;
     const res = http.get(`${BASE_URL}/api/trips/${TEST_TRIP_ID}`, { headers: authHeaders });
