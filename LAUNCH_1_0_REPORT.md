@@ -926,3 +926,13 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Validação:** build Java limpo (`mvn compile`), sintaxe Python limpa, testes reais de concorrência (`SKIP LOCKED` com 2 processos genuinamente simultâneos), falha forçada + recuperação, 9 cenários da secção 6 do pedido original (criação de POI, fotografia nova/removida, dados SIPA, escrita externa à API, etc.), todos em transações com `ROLLBACK` onde possível para não deixar dados de teste.
 - **Estado:** Implementado e validado localmente. **Commitado e enviado (push)** — `ad55696` em `portugal-na-mao-api` (código), `b50c792` em `portugal-workspace` (os 3 relatórios de estudo/implementação).
 - **Ficheiros:** ver mensagens dos 2 commits para a lista completa.
+
+## 66. Filtros — toggle por grupo deixa de "selecionar tudo", passa a ser só "Limpar" (2026-10-15)
+
+- **Tipo:** correção de UX pequena (frontend).
+- **Intenção:** o botão por grupo (Cultura/Natureza/Locais) no `FilterSheet` alternava entre "Todos" (seleciona tudo no grupo) e "Limpar" (desmarca tudo) consoante o estado. Pedido explícito do André: remover a seleção total — não tem utilidade real; só interessa limpar depois de selecionar vários.
+- **Nota:** distinto do botão principal "Limpar" (já implementado desde a entrada 46) e do seletor de Visibilidade "Todos"/"Principais"/"Nenhum" (controlo diferente, não tocado) — confirmado com o André antes de alterar, para não mexer no sítio errado.
+- **Correção:** `toggleGroup` (select-all-ou-clear condicional) substituído por `clearGroup` (só desmarca, nunca marca); botão passa a mostrar sempre "Limpar", desativado (`disabled`) quando o grupo não tem nada selecionado — mesma lógica visual do botão principal.
+- **Validado ao vivo:** os 3 grupos mostravam "Limpar" cinzento/desativado com nada selecionado; selecionar 2 categorias em Cultura ativou o "Limpar" desse grupo (os outros dois continuaram desativados); clicar desmarcou só essas 2, badge de contagem desapareceu, botão voltou a desativado. Build de produção limpo.
+- **Estado:** Implementado e validado ao vivo. **Commitado, não enviado (push)** — a aguardar instrução.
+- **Ficheiros:** `src/components/map/FilterSheet.jsx` (`PT-portugal-na-mao-fe`).
