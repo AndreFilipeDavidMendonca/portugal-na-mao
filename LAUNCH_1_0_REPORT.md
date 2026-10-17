@@ -936,3 +936,17 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Validado ao vivo:** os 3 grupos mostravam "Limpar" cinzento/desativado com nada selecionado; selecionar 2 categorias em Cultura ativou o "Limpar" desse grupo (os outros dois continuaram desativados); clicar desmarcou só essas 2, badge de contagem desapareceu, botão voltou a desativado. Build de produção limpo.
 - **Estado:** Implementado e validado ao vivo. **Commitado, não enviado (push)** — a aguardar instrução.
 - **Ficheiros:** `src/components/map/FilterSheet.jsx` (`PT-portugal-na-mao-fe`).
+
+## 67. Viagens Partilhadas — viagem própria publicada agora aparece na própria aba + ordenação por última alteração (2026-10-17)
+
+- **Tipo:** correção de comportamento (backend + frontend), fases 1 e 2 de um pedido de 3 partes (a 3ª, Product Analytics territorial, ainda não começou).
+- **Intenção:** (1) ao publicar uma viagem, o dono não tinha nenhuma confirmação visual de que resultou — "Viagens Partilhadas" escondia deliberadamente qualquer viagem já presente em "Minhas Viagens", incluindo as próprias. (2) a lista de "Minhas Viagens" ordenava sempre por `created_at`, nunca por `updated_at` — editar uma viagem antiga não a trazia de volta ao topo.
+- **Decisão confirmada com o André:** viagens próprias publicadas passam a aparecer também em "Viagens Partilhadas" (em vez de só mostrar as dos outros); o caso de remoção de participante/despublicação enquanto outro utilizador está a ver ficou fora de âmbito por agora.
+- **Correção (1):** `TripsPanel.jsx` — `visibleSharedTrips` deixa de excluir qualquer viagem já em `trips`; agora só exclui as que o utilizador apenas participa (não é dono), preservando o dedup original (stub transitório de `TRIP_PARTICIPANT_ADDED`). Viagens do próprio dono aparecem sempre que publicadas.
+- **Correção (2):** `TripRepository.findAllForUser` passa a ordenar por `t.updatedAt DESC` (era `createdAt`). `TripDto`/`TripService.toDto` passam a expor `updatedAt` (em falta até agora). `AppContext.editTrip` reordena a lista localmente (viagem editada para o topo) assim que a resposta do PATCH volta, sem esperar por um novo fetch.
+- **Validado ao vivo:** confirmado com utilizador real (Sirinny) — viagem própria já publicada passou a aparecer em "Viagens Partilhadas"; editar o nome de uma viagem moveu-a imediatamente para o topo de "Minhas Viagens", e a ordem manteve-se depois de recarregar a página (fetch novo do backend).
+- **Achado à margem (não corrigido, fora de âmbito):** `POST /api/trips` (criar viagem) falha sempre com 500 no backend local — `TripService.createTrip` chama `UserActivityLogService.logTripCreated` (insert direto via JdbcTemplate) na mesma transação, antes de o Hibernate ter de facto enviado o INSERT da `trip` para o Postgres; o insert do `user_activity_log` viola a FK `user_activity_log_trip_id_fkey` porque a trip ainda não existe fisicamente na BD nesse momento. Reportado ao André, decisão explícita de corrigir depois, não hoje.
+- **Estado:** Implementado, validado ao vivo e **commitado** — `cf6188c` (API) / `b04b50f` (FE). Não enviado (push) — a aguardar instrução.
+- **Ficheiros:**
+  - Backend: `TripRepository.java`, `TripDto.java`, `TripService.java` (`portugal-na-mao-api`)
+  - Frontend: `TripsPanel.jsx`, `AppContext.jsx` (`PT-portugal-na-mao-fe`) — commit isolado por hunk (`git apply --cached`), já que estes dois ficheiros tinham também alterações de outra sessão em curso (migração de imagens hero para `src/assets/`), não tocadas nem commitadas por mim.
