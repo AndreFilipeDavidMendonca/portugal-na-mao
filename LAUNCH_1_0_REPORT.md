@@ -972,3 +972,54 @@ Trabalho da Van/Tour Guide preservado à parte em `feature/van-tour-guide` — n
 - **Ficheiros:**
   - Backend: `MunicipalityPermissionService.java`, `MunicipalityUserManagementController.java`, `TerritorialAnalyticsController.java` (novo), `TerritorialAnalyticsService.java` (novo), `TerritorialAnalyticsScopeDto.java`/`TerritorialAnalyticsSummaryDto.java`/`TerritorialDistrictOptionDto.java`/`TerritorialMunicipalityOptionDto.java` (novos) (`portugal-na-mao-api`)
   - Frontend: `TerritorialAnalyticsPanel.jsx`/`TerritorialTimeSeriesChart.jsx`/`TerritorialEventsPieChart.jsx`/`TerritorialTopPoisBarChart.jsx`/`TerritorialMetricCard.jsx` (novos), `analyticsPalette.js` (novo), `MunicipalityDrawer.jsx`, `DistrictDrawer.jsx`, `AdminEntityDrawer.jsx`, `TopBar.jsx`, `AppContext.jsx`, `api.js`, `i18n.js` (`PT-portugal-na-mao-fe`) — `App.js` (ponto de montagem) não entrou neste commit por estar a meio de um refactor de outra sessão; absorvido corretamente nesse commit deles (`d1a5469`), confirmado depois que o meu mount point ficou intacto.
+
+## 69. Analytics territorial — correção do âmbito ("dados nacionais") + mais indicadores e filtros (2026-10-19)
+
+- **Tipo:** correção de bug + expansão de feature (backend + frontend). Continuação da entrada 68.
+- **Sintoma reportado:** ao abrir as Análises de um distrito ou município apareciam dados de âmbito nacional.
+
+### 1. Causa da apresentação de dados nacionais
+Não era o cálculo — o `/summary` **já estava** corretamente limitado (medido: distrito de Portalegre 16.165 eventos vs. 505.962 nacionais). A causa era o **`/scope`**, que alimentava a dropdown de filtro: devolvia todos os municípios que o utilizador podia ver em **qualquer ponto do país** (para ADMIN, os 308). Numa página do distrito de Portalegre a dropdown oferecia Lisboa — e escolhê-la mostrava mesmo Lisboa, porque nessa versão a seleção *navegava* para o município em vez de filtrar. Era por aí que os dados nacionais entravam.
+
+**Dois erros de contagem encontrados pelo caminho** (ambos faziam a página mostrar *menos* do que devia, não mais):
+- `DISTRICT_VIEW` era **descartado por completo** ao filtrar por distrito — o `COALESCE` só resolvia município, e estas linhas não têm nenhum. São 54.440 linhas locais, justamente o evento mais relevante de uma página de distrito.
+- O **tráfego sintético dos testes de carga** (`test_run_id`, 94.937 de 600.895 linhas ≈ 16%, concentrado em `POI_VIEW`) era contado como uso real, distorcendo "POIs mais vistos".
+
+### 2. Correção do contexto territorial
+- `/scope` passou a ser **por página**: municípios *deste* distrito, ou localidades *deste* município. Os métodos de "universo nacional" (`analyticsEligibleMunicipalities`/`Districts`) foram **removidos**, com um comentário no sítio a explicar porquê, para não voltarem a ser reutilizados.
+- A dropdown de município deixou de navegar e passou a **filtrar**: a página continua a ser a do distrito.
+- Território resolvido por evento como `COALESCE(l.district_id, mun.district_id, p.district_id)`, recuperando `DISTRICT_VIEW` e `MUNICIPALITY_VIEW`.
+- `test_run_id IS NULL` em todas as queries.
+
+### 3. Indicadores adicionados
+Distribuição por categoria · Localidades mais consultadas · Municípios mais vistos (só na vista de distrito inteiro) · Pesquisas mais frequentes. Mantidos: total de eventos, utilizadores ativos, evolução, tipos de evento, POIs mais vistos.
+
+### 4. Filtros implementados
+Distrito: município · tipo de evento · categoria · período. Município: localidade · tipo de evento · categoria · período. Combinam entre si; todas alfabéticas com "Todos/Todas" à cabeça; mudar de território limpa os filtros. O filtro de localidade respeita a **hierarquia** (freguesia → povoamento, 2 níveis): escolher a freguesia inclui as filhas — sem isto perdiam-se os POIs ligados ao nível de baixo (7.254 POIs estão em freguesias, 2.889 em povoamentos).
+
+### 5. Endpoints
+Reutilizados (assinatura alterada): `GET /api/territorial-analytics/scope` e `/summary`. Nenhum endpoint novo, nenhum serviço novo, nenhuma migração.
+
+### 6. Permissões — testado, não só lido
+| Cenário | Resultado |
+|---|---|
+| Distrito 17 | 200, 16.168 eventos (nunca os 505.962 nacionais) |
+| Município 177 | 200, 15.050 |
+| Distrito 17 filtrado pelo seu município 177 | 200, 15.050 (coerente com o acesso direto) |
+| **Distrito 17 + município 153 (Lisboa, outro distrito)** | **403** "Este município não pertence ao distrito da página" |
+| **Localidade de outro município** | **404/403** |
+| **Pedido sem território nenhum** | **400** — nunca devolve nacional |
+
+### 7. Testes executados
+Os 15 primeiros pontos da lista pedida, ao vivo no browser e por chamada direta à API: distrito de Portalegre → só dados do distrito; filtrar por Marvão → tudo restringido, página continua "Distrito · Portalegre"; página de município → dropdown de localidades (16, com duplicados desambiguados); filtro por "Sé" → 8.780 eventos em 90 dias, batendo exatamente com o SQL; períodos; ordenação alfabética; estados vazios e de erro.
+
+### 8. Limitações identificadas
+1. **Pesquisas mais frequentes vêm sempre vazias** — os eventos `SEARCH` não guardam distrito, município nem POI, logo não há como atribuí-los a um território. O indicador fica visível com essa explicação em vez de ser escondido (cumpre "não atribuir pesquisas a territórios sem informação suficiente").
+2. **Localidades mais consultadas é derivado** da localidade dos POIs vistos (não existe evento `LOCALITY_VIEW`), e só ~64% dos POI views resolvem localidade.
+3. **Divergência deliberada face ao Operations:** o Product Analytics do Operations **não** exclui `test_run_id`; esta vista exclui. Preferi números corretos a paridade exata — mas é uma decisão reversível numa linha, se preferires alinhar.
+4. **Correspondência com o Operations não foi verificada lado a lado** (ponto 17 da lista) — compararia uma vista nacional com uma territorial, e a divergência do ponto 3 torna os totais propositadamente diferentes.
+5. **Permissões testadas apenas com conta ADMIN.** Os 403/404 acima provam a lógica de contenção, mas o caminho de um gestor municipal real (sem bypass) continua por validar ao vivo — ver a nota da sessão anterior sobre as contas `mendonca@gmail.com` e `digital.root.tech@gmail.com`.
+6. Só desktop, como pedido.
+
+- **Estado:** Implementado e validado ao vivo. **Commitado, não enviado (push)** — `142dcb8` (API) / `f89a671` (FE).
+- **Ficheiros:** Backend — `TerritorialAnalyticsService.java`, `TerritorialAnalyticsController.java`, `MunicipalityPermissionService.java`, DTOs de analytics (`TerritorialLocalityOptionDto` novo, `TerritorialDistrictOptionDto` removido). Frontend — `TerritorialAnalyticsPanel.jsx`, `TerritorialRankingBarChart.jsx` (novo, substitui `TerritorialTopPoisBarChart.jsx`), `api.js`, `i18n.js`.
