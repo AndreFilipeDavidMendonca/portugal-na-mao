@@ -1023,3 +1023,21 @@ Os 15 primeiros pontos da lista pedida, ao vivo no browser e por chamada direta 
 
 - **Estado:** Implementado e validado ao vivo. **Commitado, não enviado (push)** — `142dcb8` (API) / `f89a671` (FE).
 - **Ficheiros:** Backend — `TerritorialAnalyticsService.java`, `TerritorialAnalyticsController.java`, `MunicipalityPermissionService.java`, DTOs de analytics (`TerritorialLocalityOptionDto` novo, `TerritorialDistrictOptionDto` removido). Frontend — `TerritorialAnalyticsPanel.jsx`, `TerritorialRankingBarChart.jsx` (novo, substitui `TerritorialTopPoisBarChart.jsx`), `api.js`, `i18n.js`.
+
+## 70. Analytics territorial — adaptação a mobile + componente de filtros (2026-10-19)
+
+- **Tipo:** feature (frontend). Continuação das entradas 68-69.
+- **Pedido:** "adapta a mobile o analytics. basicamente fecha o modal e abre o analytics, pode voltar atrás e não perde as alterações. cria um componente filtros para conter as dropdowns."
+- **Implementação:**
+  - "Ver análises" deixou de estar limitado a `isDesktop` — mostra-se em mobile também, com o mesmo gate de permissão.
+  - `TerritorialAnalyticsPanel` escolhe layout por `useIsDesktop()`: desktop mantém o comportamento existente (substitui o mapa, drawer continua ao lado); mobile passa a `fixed inset-x-0 top-0 bottom-[70px] z-[1460]` — ecrã inteiro, acima da drawer (`z-[1450]`), deixando a faixa da `MobileNav` livre (mesma convenção que o `FilterSheet` e a própria drawer mobile já usam).
+  - A drawer **nunca é desmontada** ao abrir o Analytics (nem em mobile nem em desktop) — só fica visualmente coberta. "Voltar atrás" é só `closeTerritorialAnalytics()`, que remove a sobreposição; a drawer reaparece com o estado de componente intacto.
+  - O botão de análises deixou de se esconder durante uma edição em curso (só o botão de editar continua a esconder-se, por não fazer sentido um segundo clique) — sem isto o pedido "não perde as alterações" nunca seria alcançável, porque não havia forma de abrir o Analytics a meio de uma edição.
+  - `TerritorialAnalyticsFilters.jsx` novo: as 4 dropdowns (território/tipo de evento/categoria/período) extraídas do painel, reutilizadas tal e qual pelos dois layouts (`w-full` em mobile, linha própria; `lg:w-auto lg:ml-auto` em desktop, à direita do título).
+- **Validado ao vivo** (forçando `useIsDesktop` a `false` temporariamente, já revertido — o resize de janela via automação não afeta o viewport real nesta sessão):
+  1. Layout mobile do painel renderiza (overlay de ecrã inteiro, z acima da drawer).
+  2. Escrevi texto no nome do distrito (Portalegre) sem gravar → abri o Analytics → voltei atrás → **o rascunho continuava lá, por gravar**, exatamente como pedido.
+  3. Desktop confirmado inalterado depois da alteração (drawer ao lado, filtros em linha).
+- **Limitação:** a verificação de layout mobile foi feita por um "force" temporário da variável JS `isDesktop` (revertido antes do commit), não por um viewport real estreito — a automação de browser disponível nesta sessão não conseguiu redimensionar a janela abaixo da largura desktop. A lógica de posicionamento/z-index foi confirmada; o aspeto visual fino (quebra de linha dos filtros, por exemplo) só depende de CSS `lg:` já usado em todo o resto da app, não foi visto num ecrã estreito real.
+- **Estado:** Implementado e validado (com a ressalva acima). **Commitado, não enviado (push)** — `163f09c` (FE). Sem alterações de backend.
+- **Ficheiros:** `TerritorialAnalyticsPanel.jsx`, `TerritorialAnalyticsFilters.jsx` (novo), `AdminEntityDrawer.jsx`, `MunicipalityDrawer.jsx`, `DistrictDrawer.jsx`.
